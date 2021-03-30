@@ -135,11 +135,9 @@ void Ekf::checkHaglYawResetReq()
 void Ekf::runOnGroundYawReset()
 {
 	if (_mag_yaw_reset_req && isYawResetAuthorized()) {
-		const bool has_realigned_yaw = canResetMagHeading()
-					       ? resetMagHeading(_mag_lpf.getState())
-					       : false;
-
-		_mag_yaw_reset_req = !has_realigned_yaw;
+		if (canResetMagHeading()) {
+			_mag_yaw_reset_req = !resetMagHeading(_mag_lpf.getState());
+		}
 	}
 }
 
@@ -151,13 +149,14 @@ bool Ekf::canResetMagHeading() const
 void Ekf::runInAirYawReset()
 {
 	if (_mag_yaw_reset_req && isYawResetAuthorized()) {
-		bool has_realigned_yaw = false;
+		if (canRealignYawUsingGps()) {
+			_control_status.flags.mag_aligned_in_flight = realignYawGPS();
+			_mag_yaw_reset_req = !_control_status.flags.mag_aligned_in_flight;
 
-		if (canRealignYawUsingGps()) { has_realigned_yaw = realignYawGPS(); }
-		else if (canResetMagHeading()) { has_realigned_yaw = resetMagHeading(_mag_lpf.getState()); }
-
-		_mag_yaw_reset_req = !has_realigned_yaw;
-		_control_status.flags.mag_aligned_in_flight = has_realigned_yaw;
+		} else if (canResetMagHeading()) {
+			_control_status.flags.mag_aligned_in_flight = resetMagHeading(_mag_lpf.getState());
+			_mag_yaw_reset_req = !_control_status.flags.mag_aligned_in_flight;
+		}
 	}
 }
 
@@ -173,7 +172,12 @@ void Ekf::runVelPosReset()
 void Ekf::selectMagAuto()
 {
 	check3DMagFusionSuitability();
-	canUse3DMagFusion() ? startMag3DFusion() : startMagHdgFusion();
+	if (canUse3DMagFusion()) {
+		startMag3DFusion();
+
+	} else {
+		startMagHdgFusion();
+	}
 }
 
 void Ekf::check3DMagFusionSuitability()
